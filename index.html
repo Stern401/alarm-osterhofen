@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Alarm-Textgenerator</title>
+<style>
+  :root{
+    --bg: #131417;
+    --panel: #1c1e23;
+    --panel-2: #23262c;
+    --line: #33363d;
+    --red: #d1372c;
+    --red-bright: #ff4a3d;
+    --amber: #e0a12b;
+    --text: #e9e8e4;
+    --text-dim: #9a9da5;
+    --text-dim2: #8b8e96;
+    --mono: 'JetBrains Mono', 'Courier New', ui-monospace, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    padding: 24px 16px 60px;
+  }
+  .wrap{max-width: 720px; margin: 0 auto;}
+
+  .head{
+    display:flex; align-items:center; gap:14px; margin-bottom: 22px;
+  }
+  .dot{
+    width:12px;height:12px;border-radius:50%;
+    background: var(--red-bright);
+    box-shadow: 0 0 0 0 rgba(255,74,61,.6);
+    animation: pulse 1.8s infinite;
+    flex-shrink:0;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(255,74,61,.55);}
+    70%{box-shadow:0 0 0 9px rgba(255,74,61,0);}
+    100%{box-shadow:0 0 0 0 rgba(255,74,61,0);}
+  }
+  h1{
+    font-family: var(--mono);
+    font-size: 15px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    margin:0;
+    color: var(--text-dim2);
+  }
+  h1 b{color:var(--text); font-weight:700;}
+
+  .card{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .label{
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 8px;
+    display:block;
+  }
+  textarea, input[type=text]{
+    width:100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    resize: vertical;
+  }
+  textarea:focus, input:focus{outline: 1px solid var(--red-bright); border-color: var(--red-bright);}
+  #raw{height: 190px;}
+
+  .row{display:flex; gap:10px; flex-wrap:wrap;}
+  .row .field{flex:1; min-width: 140px;}
+
+  button{
+    font-family: var(--sans);
+    font-weight:600;
+    font-size:14px;
+    border-radius:7px;
+    border:1px solid transparent;
+    padding: 10px 16px;
+    cursor:pointer;
+    transition: filter .12s ease, transform .05s ease;
+  }
+  button:active{transform: scale(.98);}
+  .btn-primary{background: var(--red); color:#fff;}
+  .btn-primary:hover{filter:brightness(1.1);}
+  .btn-ghost{background: transparent; border-color: var(--line); color: var(--text-dim2);}
+  .btn-ghost:hover{border-color:#555; color:var(--text);}
+  .btn-row{display:flex; gap:10px; margin-top:14px;}
+
+  .fields{margin-top:14px; display:grid; gap:12px;}
+
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
+  .chip{
+    font-family: var(--mono);
+    font-size: 12.5px;
+    padding: 7px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--panel-2);
+    color: var(--text-dim2);
+    cursor:pointer;
+    user-select:none;
+    transition: all .1s ease;
+  }
+  .chip.on{
+    background: rgba(209,55,44,.18);
+    border-color: var(--red);
+    color: var(--text);
+  }
+
+  .ffread{
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-dim2);
+    line-height:1.7;
+  }
+  .ffread .empty{color:#5a5d64; font-style:italic;}
+
+  #output{
+    height: 260px;
+    white-space: pre-wrap;
+    font-size: 13.5px;
+    line-height:1.55;
+  }
+
+  .settings-toggle{
+    font-family: var(--mono);
+    font-size:11px;
+    color: var(--text-dim2);
+    cursor:pointer;
+    text-decoration: underline dotted;
+    display:inline-block;
+    margin-top:4px;
+  }
+  #settingsPanel{display:none;}
+  #settingsPanel.open{display:block;}
+
+  .hint{font-size:12px; color:#6d7078; margin-top:8px; line-height:1.5;}
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform: translateX(-50%);
+    background: var(--red); color:#fff; padding:9px 18px; border-radius:20px;
+    font-size:13px; font-weight:600; opacity:0; pointer-events:none;
+    transition: opacity .2s ease;
+  }
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <div class="dot"></div>
+    <h1><b>ALARM</b> · TEXTGENERATOR</h1>
+  </div>
+
+  <div class="card" id="incidentsCard">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <span class="label" style="margin-bottom:0;">📥 Offene Einsätze</span>
+      <button class="btn-ghost" style="padding:6px 12px; font-size:12px;" onclick="fetchIncidents()">Aktualisieren</button>
+    </div>
+    <div id="incidentList" style="margin-top:10px;">
+      <div class="hint" id="incidentHint">Web-App-URL &amp; Token noch nicht eingetragen — siehe Einstellungen unten, oder Mail-Text manuell einfügen.</div>
+    </div>
+    <div class="settings-toggle" onclick="toggleBackendSettings()">Backend-Verbindung einrichten ▾</div>
+    <div id="backendSettings" style="display:none; margin-top:10px;">
+      <div class="fields">
+        <div>
+          <span class="label" style="color:var(--text-dim2)">Web-App-URL (aus Apps Script Deployment, endet auf /exec)</span>
+          <input type="text" id="webappUrl" placeholder="https://script.google.com/macros/s/.../exec">
+        </div>
+        <div>
+          <span class="label" style="color:var(--text-dim2)">API-Token</span>
+          <input type="text" id="apiToken" placeholder="z.B. 1234-abcd-...">
+        </div>
+        <button class="btn-ghost" style="width:fit-content" onclick="saveBackendSettings()">Verbindung speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="label">① Mail-Text einfügen <span style="color:var(--text-dim2); text-transform:none; letter-spacing:0;">(nur falls kein Einsatz oben ausgewählt wurde)</span></span>
+    <textarea id="raw" placeholder="Kompletten Alarmierungstext hier einfügen …"></textarea>
+    <div class="btn-row">
+      <button class="btn-primary" onclick="parseMail()">Text auslesen</button>
+      <button class="btn-ghost" onclick="document.getElementById('raw').value='';">Leeren</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="label">② Erkannte Werte (bei Bedarf korrigieren)</span>
+    <div class="fields">
+      <div class="row">
+        <div class="field">
+          <span class="label" style="color:var(--text-dim2)">Datum</span>
+          <input type="text" id="fDatum" placeholder="01.01.2026">
+        </div>
+        <div class="field">
+          <span class="label" style="color:var(--text-dim2)">Uhrzeit</span>
+          <input type="text" id="fZeit" placeholder="14:02">
+        </div>
+      </div>
+      <div>
+        <span class="label" style="color:var(--text-dim2)">Info-Text (nach ℹ️)</span>
+        <textarea id="fInfo" style="height:56px" placeholder="🔥 (BRAND) …"></textarea>
+      </div>
+      <div>
+        <span class="label" style="color:var(--text-dim2)">Einsatzort</span>
+        <input type="text" id="fOrt" placeholder="Haardorf">
+      </div>
+      <div>
+        <span class="label" style="color:var(--text-dim2)">Zusätzliche alarmierte Feuerwehren (aus Mail erkannt)</span>
+        <div class="ffread" id="ffList"><span class="empty">— noch nicht ausgelesen —</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="label">③ Im Einsatz — Fahrzeuge auswählen</span>
+    <div class="chips" id="vehicleChips"></div>
+    <div class="settings-toggle" onclick="toggleSettings()">Fahrzeugliste / eigene Feuerwehr bearbeiten ▾</div>
+    <div id="settingsPanel">
+      <div class="fields" style="margin-top:10px;">
+        <div>
+          <span class="label" style="color:var(--text-dim2)">Eigene Feuerwehr (wird aus "Zusätzliche alarmierte" ausgeschlossen)</span>
+          <input type="text" id="ownFd" placeholder="FF Osterhofen">
+        </div>
+        <div>
+          <span class="label" style="color:var(--text-dim2)">Fahrzeug-Flotte (ein Fahrzeug pro Zeile)</span>
+          <textarea id="fleetList" style="height:140px" placeholder="Osterhofen 11/1&#10;Osterhofen 36/1: Rüst-Container, GW-Wasser, Gefahrgut-Container&#10;Osterhofen 23/1"></textarea>
+          <div class="hint" style="margin-top:6px;">Fahrzeuge mit wechselnden Anhängern/Containern: Name, dann <code>:</code>, dann die Optionen getrennt mit <code>,</code> — z.B. <code>Osterhofen 36/1: Rüst-Container, GW-Wasser</code></div>
+        </div>
+        <div>
+          <span class="label" style="color:var(--text-dim2)">Hashtag</span>
+          <input type="text" id="hashtag" placeholder="#ffwosterhofen">
+        </div>
+        <button class="btn-ghost" style="width:fit-content" onclick="saveSettings()">Einstellungen speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="label">④ Ergebnis</span>
+    <textarea id="output" readonly></textarea>
+    <div class="btn-row">
+      <button class="btn-primary" onclick="generateOutput()">Text erzeugen</button>
+      <button class="btn-ghost" onclick="copyOutput()">In Zwischenablage kopieren</button>
+      <button class="btn-ghost" id="doneBtn" style="display:none;" onclick="markDone()">Einsatz als erledigt markieren</button>
+    </div>
+    <div class="hint">Einsatz oben auswählen (oder Mail-Text einfügen) → ③ Fahrzeuge antippen → ④ erzeugen &amp; kopieren.</div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let settings = { ownFd: 'FF Osterhofen', fleet: [
+  { name: 'Osterhofen 10/1', options: [] },
+  { name: 'Osterhofen 11/1', options: [] },
+  { name: 'Osterhofen 14/1', options: [] },
+  { name: 'Osterhofen 21/1', options: [] },
+  { name: 'Osterhofen 23/1', options: [] },
+  { name: 'Osterhofen 30/1', options: [] },
+  { name: 'Osterhofen 36/1', options: [] },
+  { name: 'Osterhofen 40/1', options: [] },
+  { name: 'Osterhofen 42/1', options: [] },
+  { name: 'Osterhofen 44/1', options: [] },
+  { name: 'Osterhofen 55/1', options: [] }
+], hashtag: '#ffwosterhofen' };
+let selectedVehicles = new Set();
+let vehicleAttachments = {}; // Fahrzeugname -> gewählter Anhänger/Container
+let parsedFf = [];
+let backend = { url: '', token: '' };
+let currentIncidentId = null;
+
+// Läuft das Tool in Claude (window.storage vorhanden) -> Claude-Speicher nutzen.
+// Läuft es als eigenständige Datei (z.B. lokal geöffnet/gehostet) -> localStorage nutzen.
+const hasCloudStorage = () => typeof window.storage !== 'undefined' && window.storage;
+
+async function storageGet(key){
+  if(hasCloudStorage()){
+    return await window.storage.get(key);
+  }
+  const v = localStorage.getItem(key);
+  return v !== null ? { value: v } : null;
+}
+
+async function storageSet(key, value){
+  if(hasCloudStorage()){
+    return await window.storage.set(key, value);
+  }
+  localStorage.setItem(key, value);
+  return { value };
+}
+
+async function loadSettings(){
+  try{
+    const r = await storageGet('alarm-generator-settings');
+    if(r && r.value){
+      const s = JSON.parse(r.value);
+      settings = Object.assign(settings, s);
+    }
+  }catch(e){ /* keine gespeicherten Einstellungen, Standard verwenden */ }
+  document.getElementById('ownFd').value = settings.ownFd;
+  settings.fleet = (settings.fleet || []).map(v => typeof v === 'string' ? { name: v, options: [] } : v);
+  document.getElementById('fleetList').value = settings.fleet
+    .map(v => (v.options && v.options.length) ? `${v.name}: ${v.options.join(', ')}` : v.name)
+    .join('\n');
+  document.getElementById('hashtag').value = settings.hashtag;
+  renderChips();
+
+  try{
+    const r2 = await storageGet('alarm-generator-backend');
+    if(r2 && r2.value){
+      backend = JSON.parse(r2.value);
+      document.getElementById('webappUrl').value = backend.url || '';
+      document.getElementById('apiToken').value = backend.token || '';
+    }
+  }catch(e){ /* keine Backend-Verbindung gespeichert */ }
+
+  if(backend.url && backend.token){
+    fetchIncidents();
+  }
+}
+
+function toggleBackendSettings(){
+  document.getElementById('backendSettings').style.display =
+    document.getElementById('backendSettings').style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveBackendSettings(){
+  backend.url = document.getElementById('webappUrl').value.trim().replace(/\/$/, '');
+  backend.token = document.getElementById('apiToken').value.trim();
+  try{
+    await storageSet('alarm-generator-backend', JSON.stringify(backend));
+    showToast('Verbindung gespeichert');
+    fetchIncidents();
+  }catch(e){
+    showToast('Speichern fehlgeschlagen');
+  }
+}
+
+async function fetchIncidents(){
+  const listBox = document.getElementById('incidentList');
+  const hint = document.getElementById('incidentHint');
+  if(!backend.url || !backend.token){
+    if(hint) hint.textContent = 'Web-App-URL & Token noch nicht eingetragen — siehe Einstellungen unten, oder Mail-Text manuell einfügen.';
+    return;
+  }
+  listBox.innerHTML = '<div class="hint">Lade offene Einsätze …</div>';
+  try{
+    const res = await fetch(`${backend.url}?action=list&token=${encodeURIComponent(backend.token)}`);
+    const data = await res.json();
+    if(data.error){ listBox.innerHTML = `<div class="hint">Fehler: ${data.error} — Token prüfen.</div>`; return; }
+    if(!data.length){ listBox.innerHTML = '<div class="hint">Aktuell keine offenen Einsätze.</div>'; return; }
+    listBox.innerHTML = '';
+    data.forEach(inc=>{
+      const el = document.createElement('div');
+      el.style.cssText = 'border:1px solid var(--line); border-radius:7px; padding:10px 12px; margin-bottom:8px; cursor:pointer; background:var(--panel-2);';
+      el.innerHTML = `<div style="font-family:var(--mono); font-size:12px; color:var(--red-bright);">${inc.datum} · ${inc.zeit} Uhr</div>
+        <div style="font-size:13.5px; margin-top:3px;">${(inc.info||'').split('\n')[0]}</div>
+        <div style="font-size:12px; color:var(--text-dim2); margin-top:2px;">📍 ${inc.ort||'—'}</div>`;
+      el.onclick = ()=>selectIncident(inc);
+      listBox.appendChild(el);
+    });
+  }catch(e){
+    listBox.innerHTML = '<div class="hint">Verbindung fehlgeschlagen — URL/Token prüfen oder Mail manuell einfügen.</div>';
+  }
+}
+
+function selectIncident(inc){
+  currentIncidentId = inc.id;
+  document.getElementById('fDatum').value = inc.datum || '';
+  document.getElementById('fZeit').value = inc.zeit || '';
+  document.getElementById('fInfo').value = inc.info || '';
+  document.getElementById('fOrt').value = inc.ort || '';
+  parsedFf = (inc.feuerwehren || []).filter(Boolean);
+  const ffBox = document.getElementById('ffList');
+  ffBox.innerHTML = parsedFf.length
+    ? parsedFf.map(f=>`<div>${f}</div>`).join('')
+    : '<span class="empty">— keine weiteren gefunden —</span>';
+  document.getElementById('doneBtn').style.display = 'inline-block';
+  showToast('Einsatz geladen');
+  window.scrollTo({top: document.getElementById('vehicleChips').getBoundingClientRect().top + window.scrollY - 80, behavior:'smooth'});
+}
+
+async function markDone(){
+  if(!currentIncidentId || !backend.url || !backend.token) return;
+  try{
+    await fetch(backend.url, {
+      method:'POST',
+      body: JSON.stringify({action:'erledigt', id: currentIncidentId, token: backend.token})
+    });
+    showToast('Als erledigt markiert');
+    currentIncidentId = null;
+    document.getElementById('doneBtn').style.display = 'none';
+    fetchIncidents();
+  }catch(e){
+    showToast('Fehlgeschlagen');
+  }
+}
+
+async function saveSettings(){
+  settings.ownFd = document.getElementById('ownFd').value.trim() || 'FF Osterhofen';
+  settings.fleet = document.getElementById('fleetList').value.split('\n')
+    .map(s=>s.trim()).filter(Boolean)
+    .map(line=>{
+      const sep = line.indexOf(':');
+      const namePart = sep === -1 ? line : line.slice(0, sep);
+      const optPart = sep === -1 ? '' : line.slice(sep + 1);
+      const name = namePart.trim();
+      const options = optPart ? optPart.split(',').map(o=>o.trim()).filter(Boolean) : [];
+      return { name, options };
+    });
+  settings.hashtag = document.getElementById('hashtag').value.trim() || '#ffwosterhofen';
+  const fleetNames = settings.fleet.map(v=>v.name);
+  selectedVehicles = new Set([...selectedVehicles].filter(v => fleetNames.includes(v)));
+  Object.keys(vehicleAttachments).forEach(k => { if(!fleetNames.includes(k)) delete vehicleAttachments[k]; });
+  renderChips();
+  try{
+    await storageSet('alarm-generator-settings', JSON.stringify(settings));
+    showToast('Einstellungen gespeichert');
+  }catch(e){
+    showToast('Speichern fehlgeschlagen');
+  }
+}
+
+function toggleSettings(){
+  document.getElementById('settingsPanel').classList.toggle('open');
+}
+
+function renderChips(){
+  const box = document.getElementById('vehicleChips');
+  box.innerHTML = '';
+  settings.fleet.forEach(v=>{
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:inline-flex; align-items:center; gap:6px; margin-bottom:6px;';
+
+    const el = document.createElement('div');
+    const isOn = selectedVehicles.has(v.name);
+    el.className = 'chip' + (isOn ? ' on' : '');
+    el.textContent = v.name;
+    el.onclick = ()=>{
+      if(selectedVehicles.has(v.name)){
+        selectedVehicles.delete(v.name);
+        delete vehicleAttachments[v.name];
+      } else {
+        selectedVehicles.add(v.name);
+      }
+      renderChips();
+    };
+    wrap.appendChild(el);
+
+    if(isOn && v.options && v.options.length){
+      v.options.forEach(opt=>{
+        const sub = document.createElement('div');
+        const subOn = vehicleAttachments[v.name] === opt;
+        sub.className = 'chip' + (subOn ? ' on' : '');
+        sub.style.cssText = 'font-size:11.5px; padding:5px 10px; opacity:.9;';
+        sub.textContent = opt;
+        sub.onclick = (ev)=>{
+          ev.stopPropagation();
+          vehicleAttachments[v.name] = subOn ? undefined : opt;
+          if(vehicleAttachments[v.name] === undefined) delete vehicleAttachments[v.name];
+          renderChips();
+        };
+        wrap.appendChild(sub);
+      });
+    }
+
+    box.appendChild(wrap);
+  });
+}
+
+function parseMail(){
+  const raw = document.getElementById('raw').value;
+  if(!raw.trim()){ showToast('Bitte zuerst Text einfügen'); return; }
+  currentIncidentId = null;
+  document.getElementById('doneBtn').style.display = 'none';
+  const lines = raw.split('\n').map(l=>l.trim());
+
+  // Datum + Uhrzeit
+  const dt = raw.match(/(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2}):\d{2}/);
+  document.getElementById('fDatum').value = dt ? dt[1] : '';
+  document.getElementById('fZeit').value = dt ? dt[2] : '';
+
+  // PLZ-Zeile finden -> Einsatzort + Ende des Adressblocks
+  let plzIdx = -1, ort = '';
+  lines.forEach((l,i)=>{
+    const m = l.match(/^\d{5}\s+(.+)$/);
+    if(m && plzIdx === -1){ plzIdx = i; ort = m[1].trim(); }
+  });
+  document.getElementById('fOrt').value = ort;
+
+  // Info-Text: zwischen "Gruppe: ..." Zeile und Adressblock (3 Zeilen vor PLZ-Zeile)
+  const gruppeIdx = lines.findIndex(l => /^Gruppe:/i.test(l));
+  let info = '';
+  if(gruppeIdx !== -1 && plzIdx !== -1){
+    const addrStart = Math.max(gruppeIdx+1, plzIdx - 2); // Straße-Zeile, Straße+Nr-Zeile, PLZ-Zeile = 3 Zeilen
+    const infoLines = lines.slice(gruppeIdx+1, addrStart).filter(Boolean);
+    info = infoLines.join('\n');
+  }
+  document.getElementById('fInfo').value = info;
+
+  // Alarmierte Fahrzeuge -> zusätzliche Feuerwehren (Zeilen die mit "FF " beginnen, ohne eigene FW)
+  const fzIdx = lines.findIndex(l => /^Alarmierte Fahrzeuge:/i.test(l));
+  parsedFf = [];
+  if(fzIdx !== -1){
+    for(let i = fzIdx+1; i < lines.length; i++){
+      const l = lines[i];
+      if(!l) continue;
+      if(/^https?:\/\//i.test(l)) break;
+      if(/^FF\s+/i.test(l)){
+        const own = settings.ownFd.trim().toLowerCase();
+        if(l.toLowerCase() !== own && !parsedFf.includes(l)){
+          parsedFf.push(l);
+        }
+      }
+    }
+  }
+  const ffBox = document.getElementById('ffList');
+  ffBox.innerHTML = parsedFf.length
+    ? parsedFf.map(f=>`<div>${f}</div>`).join('')
+    : '<span class="empty">— keine weiteren gefunden —</span>';
+
+  showToast('Text ausgelesen');
+}
+
+function generateOutput(){
+  const datum = document.getElementById('fDatum').value.trim();
+  const zeit = document.getElementById('fZeit').value.trim();
+  const info = document.getElementById('fInfo').value.trim();
+  const ort = document.getElementById('fOrt').value.trim();
+  const vehicles = [...selectedVehicles].map(name => {
+    const att = vehicleAttachments[name];
+    return att ? `${name} - ${att}` : name;
+  });
+  const hashtag = settings.hashtag;
+
+  const parts = [];
+  parts.push('🚨🚨 Einsatz 🚨🚨');
+  parts.push(`🗓️ Am ${datum} 🕐 ${zeit}Uhr`);
+  parts.push(`ℹ️ ${info}`);
+  parts.push(`📍 Einsatzort: ${ort}`);
+  parts.push('🚒 Im Einsatz: ');
+  parts.push('');
+  parts.push(vehicles.join('\n'));
+  parts.push('');
+  parts.push('📟 Zusätzliche alarmierte Feuerwehren:');
+  parts.push(parsedFf.join('\n'));
+  parts.push('');
+  parts.push(hashtag);
+
+  document.getElementById('output').value = parts.join('\n');
+}
+
+function copyOutput(){
+  const out = document.getElementById('output');
+  if(!out.value.trim()){ showToast('Erst Text erzeugen'); return; }
+  out.select();
+  navigator.clipboard.writeText(out.value).then(()=>{
+    showToast('Kopiert ✓');
+  }).catch(()=>{
+    document.execCommand('copy');
+    showToast('Kopiert ✓');
+  });
+}
+
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+loadSettings();
+</script>
+</body>
+</html>
