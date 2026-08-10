@@ -2,6 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Alarm-Textgenerator</title>
 <style>
   :root{
@@ -24,7 +25,7 @@
     background: var(--bg);
     color: var(--text);
     font-family: var(--sans);
-    padding: 24px 16px 60px;
+    padding: 18px 12px 60px;
   }
   .wrap{max-width: 720px; margin: 0 auto;}
 
@@ -75,13 +76,13 @@
     border: 1px solid var(--line);
     color: var(--text);
     border-radius: 7px;
-    padding: 10px 12px;
+    padding: 12px 12px;
     font-family: var(--mono);
-    font-size: 13px;
+    font-size: 16px;
     resize: vertical;
   }
   textarea:focus, input:focus{outline: 1px solid var(--red-bright); border-color: var(--red-bright);}
-  #raw{height: 190px;}
+  #raw{height: 170px;}
 
   .row{display:flex; gap:10px; flex-wrap:wrap;}
   .row .field{flex:1; min-width: 140px;}
@@ -89,10 +90,11 @@
   button{
     font-family: var(--sans);
     font-weight:600;
-    font-size:14px;
+    font-size:15px;
     border-radius:7px;
     border:1px solid transparent;
-    padding: 10px 16px;
+    padding: 13px 18px;
+    min-height: 46px;
     cursor:pointer;
     transition: filter .12s ease, transform .05s ease;
   }
@@ -101,17 +103,20 @@
   .btn-primary:hover{filter:brightness(1.1);}
   .btn-ghost{background: transparent; border-color: var(--line); color: var(--text-dim2);}
   .btn-ghost:hover{border-color:#555; color:var(--text);}
-  .btn-row{display:flex; gap:10px; margin-top:14px;}
+  .btn-row{display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;}
+  .btn-row button{flex:1; min-width: 140px;}
 
   .fields{margin-top:14px; display:grid; gap:12px;}
 
-  .chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;}
+  .chips{display:flex; flex-wrap:wrap; gap:9px; margin-top:6px;}
   .chip{
     font-family: var(--mono);
-    font-size: 12.5px;
-    padding: 7px 12px;
+    font-size: 13.5px;
+    padding: 11px 14px;
+    min-height: 22px;
+    display:flex; align-items:center;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: 8px;
     background: var(--panel-2);
     color: var(--text-dim2);
     cursor:pointer;
@@ -133,9 +138,9 @@
   .ffread .empty{color:#5a5d64; font-style:italic;}
 
   #output{
-    height: 260px;
+    height: 240px;
     white-space: pre-wrap;
-    font-size: 13.5px;
+    font-size: 15px;
     line-height:1.55;
   }
 
@@ -274,14 +279,13 @@ let settings = { ownFd: 'FF Osterhofen', fleet: [
   { name: 'Osterhofen 10/1', options: [] },
   { name: 'Osterhofen 11/1', options: [] },
   { name: 'Osterhofen 14/1', options: [] },
-  { name: 'Osterhofen 21/1', options: [] },
-  { name: 'Osterhofen 23/1', options: [] },
+  { name: 'Osterhofen 23/1', options: ['P250', 'Öl-Sanimat'] },
   { name: 'Osterhofen 30/1', options: [] },
-  { name: 'Osterhofen 36/1', options: [] },
-  { name: 'Osterhofen 40/1', options: [] },
+  { name: 'Osterhofen 31/1', options: [] },
+  { name: 'Osterhofen 36/1', options: ['AB-Mulde', 'AB-Ölwehr', 'AB-Notstrom'] },
   { name: 'Osterhofen 42/1', options: [] },
-  { name: 'Osterhofen 44/1', options: [] },
-  { name: 'Osterhofen 55/1', options: [] }
+  { name: 'Osterhofen 55/1', options: ['VSA', 'LIMA'] },
+  { name: 'Osterhofen 63/1', options: [] }
 ], hashtag: '#ffwosterhofen' };
 let selectedVehicles = new Set();
 let vehicleAttachments = {}; // Fahrzeugname -> gewählter Anhänger/Container
@@ -372,7 +376,7 @@ async function fetchIncidents(){
     listBox.innerHTML = '';
     data.forEach(inc=>{
       const el = document.createElement('div');
-      el.style.cssText = 'border:1px solid var(--line); border-radius:7px; padding:10px 12px; margin-bottom:8px; cursor:pointer; background:var(--panel-2);';
+      el.style.cssText = 'border:1px solid var(--line); border-radius:9px; padding:14px 14px; margin-bottom:9px; cursor:pointer; background:var(--panel-2);';
       el.innerHTML = `<div style="font-family:var(--mono); font-size:12px; color:var(--red-bright);">${inc.datum} · ${inc.zeit} Uhr</div>
         <div style="font-size:13.5px; margin-top:3px;">${(inc.info||'').split('\n')[0]}</div>
         <div style="font-size:12px; color:var(--text-dim2); margin-top:2px;">📍 ${inc.ort||'—'}</div>`;
@@ -547,10 +551,12 @@ function generateOutput(){
   const zeit = document.getElementById('fZeit').value.trim();
   const info = document.getElementById('fInfo').value.trim();
   const ort = document.getElementById('fOrt').value.trim();
-  const vehicles = [...selectedVehicles].map(name => {
-    const att = vehicleAttachments[name];
-    return att ? `${name} - ${att}` : name;
-  });
+  const vehicles = settings.fleet
+    .filter(v => selectedVehicles.has(v.name))
+    .map(v => {
+      const att = vehicleAttachments[v.name];
+      return att ? `${v.name} - ${att}` : v.name;
+    });
   const hashtag = settings.hashtag;
 
   const parts = [];
