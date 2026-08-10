@@ -394,7 +394,8 @@ function selectIncident(inc){
   document.getElementById('fZeit').value = inc.zeit || '';
   document.getElementById('fInfo').value = inc.info || '';
   document.getElementById('fOrt').value = inc.ort || '';
-  parsedFf = (inc.feuerwehren || []).filter(Boolean);
+  const own = settings.ownFd.trim().toLowerCase();
+  parsedFf = (inc.feuerwehren || []).filter(Boolean).filter(f => f.trim().toLowerCase() !== own);
   const ffBox = document.getElementById('ffList');
   ffBox.innerHTML = parsedFf.length
     ? parsedFf.map(f=>`<div>${f}</div>`).join('')
@@ -522,7 +523,7 @@ function parseMail(){
   }
   document.getElementById('fInfo').value = info;
 
-  // Alarmierte Fahrzeuge -> zusätzliche Feuerwehren (Zeilen die mit "FF " beginnen, ohne eigene FW)
+  // Alarmierte Fahrzeuge -> zusätzliche Feuerwehren/THW (Zeilen die mit "FF " oder "THW" beginnen, ohne eigene FW)
   const fzIdx = lines.findIndex(l => /^Alarmierte Fahrzeuge:/i.test(l));
   parsedFf = [];
   if(fzIdx !== -1){
@@ -530,7 +531,7 @@ function parseMail(){
       const l = lines[i];
       if(!l) continue;
       if(/^https?:\/\//i.test(l)) break;
-      if(/^FF\s+/i.test(l)){
+      if(/^(FF|THW)\s+/i.test(l)){
         const own = settings.ownFd.trim().toLowerCase();
         if(l.toLowerCase() !== own && !parsedFf.includes(l)){
           parsedFf.push(l);
