@@ -260,14 +260,31 @@
   </div>
 
   <div class="card">
-    <span class="label">④ Ergebnis</span>
+    <span class="label">④ Bild fürs Teilen (optional)</span>
+    <div class="chips" id="imageChips" style="align-items:flex-start;"></div>
+    <div class="settings-toggle" onclick="toggleImageSettings()">Symbolbilder verwalten ▾</div>
+    <div id="imageSettings" style="display:none; margin-top:10px;">
+      <div class="fields">
+        <div>
+          <span class="label" style="color:var(--text-dim2)">Dateinamen der Symbolbilder (ein Bild pro Zeile)</span>
+          <textarea id="imageList" style="height:90px" placeholder="brand.jpg&#10;wasserschaden.jpg&#10;thw.jpg"></textarea>
+          <div class="hint" style="margin-top:6px;">Die Bilder dazu lädst du bei GitHub in einen Ordner <code>bilder</code> neben der index.html hoch (gleicher Dateiname wie hier eingetragen).</div>
+        </div>
+        <button class="btn-ghost" style="width:fit-content" onclick="saveImageSettings()">Liste speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="label">⑤ Ergebnis</span>
     <textarea id="output" readonly></textarea>
     <div class="btn-row">
       <button class="btn-primary" onclick="generateOutput()">Text erzeugen</button>
-      <button class="btn-ghost" onclick="copyOutput()">In Zwischenablage kopieren</button>
-      <button class="btn-ghost" id="doneBtn" style="display:none;" onclick="markDone()">Einsatz als erledigt markieren</button>
+      <button class="btn-ghost" onclick="copyOutput()">Kopieren</button>
+      <button class="btn-ghost" onclick="shareResult()">📤 Teilen</button>
+      <button class="btn-ghost" id="doneBtn" style="display:none;" onclick="markDone()">Einsatz erledigt</button>
     </div>
-    <div class="hint">Einsatz oben auswählen (oder Mail-Text einfügen) → ③ Fahrzeuge antippen → ④ erzeugen &amp; kopieren.</div>
+    <div class="hint">Einsatz oben auswählen (oder Mail-Text einfügen) → Fahrzeuge antippen → ggf. Bild wählen → erzeugen &amp; teilen. Bei Instagram: Bildunterschrift ggf. per "Einfügen" ergänzen, der Text liegt bereits in der Zwischenablage.</div>
   </div>
 
 </div>
@@ -292,6 +309,7 @@ let vehicleAttachments = {}; // Fahrzeugname -> gewählter Anhänger/Container
 let parsedFf = [];
 let backend = { url: '', token: '' };
 let currentIncidentId = null;
+let selectedImage = null; // Dateiname des gewählten Symbolbilds, oder null
 
 // Läuft das Tool in Claude (window.storage vorhanden) -> Claude-Speicher nutzen.
 // Läuft es als eigenständige Datei (z.B. lokal geöffnet/gehostet) -> localStorage nutzen.
@@ -341,6 +359,15 @@ async function loadSettings(){
   if(backend.url && backend.token){
     fetchIncidents();
   }
+
+  try{
+    const r3 = await storageGet('alarm-generator-images');
+    if(r3 && r3.value){
+      settings.images = JSON.parse(r3.value);
+    }
+  }catch(e){ /* keine Bilder gespeichert */ }
+  document.getElementById('imageList').value = (settings.images || []).join('\n');
+  renderImageChips();
 }
 
 function toggleBackendSettings(){
@@ -587,6 +614,83 @@ function copyOutput(){
     document.execCommand('copy');
     showToast('Kopiert ✓');
   });
+}
+
+function toggleImageSettings(){
+  const el = document.getElementById('imageSettings');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveImageSettings(){
+  settings.images = document.getElementById('imageList').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(selectedImage && !settings.images.includes(selectedImage)) selectedImage = null;
+  renderImageChips();
+  try{
+    await storageSet('alarm-generator-images', JSON.stringify(settings.images));
+    showToast('Bilderliste gespeichert');
+  }catch(e){
+    showToast('Speichern fehlgeschlagen');
+  }
+}
+
+function renderImageChips(){
+  const box = document.getElementById('imageChips');
+  box.innerHTML = '';
+
+  const noneChip = document.createElement('div');
+  noneChip.className = 'chip' + (selectedImage === null ? ' on' : '');
+  noneChip.textContent = 'Kein Bild';
+  noneChip.onclick = ()=>{ selectedImage = null; renderImageChips(); };
+  box.appendChild(noneChip);
+
+  (settings.images || []).forEach(filename=>{
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer;';
+    const img = document.createElement('img');
+    img.src = 'bilder/' + filename;
+    img.style.cssText = 'width:64px; height:64px; object-fit:cover; border-radius:8px; border:2px solid ' +
+      (selectedImage === filename ? 'var(--red-bright)' : 'var(--line)') + ';';
+    img.onerror = ()=>{ img.style.display='none'; fallback.style.display='flex'; };
+    const fallback = document.createElement('div');
+    fallback.textContent = '❓';
+    fallback.style.cssText = 'width:64px; height:64px; display:none; align-items:center; justify-content:center; border-radius:8px; border:2px dashed var(--line); font-size:20px;';
+    const label = document.createElement('div');
+    label.textContent = filename;
+    label.style.cssText = 'font-size:10.5px; color:var(--text-dim2); max-width:70px; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+    wrap.onclick = ()=>{ selectedImage = filename; renderImageChips(); };
+    wrap.appendChild(img);
+    wrap.appendChild(fallback);
+    wrap.appendChild(label);
+    box.appendChild(wrap);
+  });
+}
+
+async function shareResult(){
+  const text = document.getElementById('output').value;
+  if(!text.trim()){ showToast('Erst Text erzeugen'); return; }
+
+  // Text sicherheitshalber immer in die Zwischenablage legen
+  try{ await navigator.clipboard.writeText(text); }catch(e){ /* ignorieren */ }
+
+  if(!navigator.share){
+    showToast('Text kopiert – Teilen hier nicht verfügbar');
+    return;
+  }
+
+  try{
+    if(selectedImage){
+      const res = await fetch('bilder/' + selectedImage);
+      const blob = await res.blob();
+      const file = new File([blob], selectedImage, { type: blob.type || 'image/jpeg' });
+      if(navigator.canShare && navigator.canShare({ files: [file] })){
+        await navigator.share({ files: [file], text: text, title: 'Einsatz' });
+        return;
+      }
+    }
+    await navigator.share({ text: text, title: 'Einsatz' });
+  }catch(e){
+    // Nutzer hat abgebrochen oder Teilen wird nicht unterstützt – Text ist schon kopiert
+  }
 }
 
 let toastTimer;
