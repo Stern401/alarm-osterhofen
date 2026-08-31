@@ -254,6 +254,11 @@
           <span class="label" style="color:var(--text-dim2)">Hashtag</span>
           <input type="text" id="hashtag" placeholder="#ffwosterhofen">
         </div>
+        <div>
+          <span class="label" style="color:var(--text-dim2)">Stichwort-Symbole (automatisches Symbol vorm Info-Text, ein Eintrag pro Zeile)</span>
+          <textarea id="keywordList" style="height:150px" placeholder="BRAND: 🔥&#10;LKW: 🚛"></textarea>
+          <div class="hint" style="margin-top:6px;">Format: Suchbegriff, dann <code>:</code>, dann Symbol — z.B. <code>BRAND: 🔥</code>. Kommt der Suchbegriff im Schlagwort-Text vor, wird das Symbol automatisch davorgesetzt. Reihenfolge zählt: erster Treffer gewinnt.</div>
+        </div>
         <button class="btn-ghost" style="width:fit-content" onclick="saveSettings()">Einstellungen speichern</button>
       </div>
     </div>
@@ -282,9 +287,10 @@
       <button class="btn-primary" onclick="generateOutput()">Text erzeugen</button>
       <button class="btn-ghost" onclick="copyOutput()">Kopieren</button>
       <button class="btn-ghost" onclick="shareResult()">📤 Teilen</button>
+      <button class="btn-ghost" onclick="openInstagramDirekt()">📸 Instagram öffnen</button>
       <button class="btn-ghost" id="doneBtn" style="display:none;" onclick="markDone()">Einsatz erledigt</button>
     </div>
-    <div class="hint">Einsatz oben auswählen (oder Mail-Text einfügen) → Fahrzeuge antippen → ggf. Bild wählen → erzeugen &amp; teilen. Bei Instagram: Bildunterschrift ggf. per "Einfügen" ergänzen, der Text liegt bereits in der Zwischenablage.</div>
+    <div class="hint">Einsatz oben auswählen (oder Mail-Text einfügen) → Fahrzeuge antippen → ggf. Bild wählen → erzeugen. "Teilen" für Facebook/WhatsApp (mit oder ohne Bild). Für Instagram mit eigenem Foto: "Instagram öffnen" nutzen, Text liegt dann in der Zwischenablage zum Einfügen.</div>
   </div>
 
 </div>
@@ -303,7 +309,21 @@ let settings = { ownFd: 'FF Osterhofen', fleet: [
   { name: 'Osterhofen 42/1', options: [] },
   { name: 'Osterhofen 55/1', options: ['VSA', 'LIMA'] },
   { name: 'Osterhofen 63/1', options: [] }
-], hashtag: '#ffwosterhofen' };
+], hashtag: '#ffwosterhofen', keywords: [
+  { keyword: 'BRAND', symbol: '🔥' },
+  { keyword: 'THL', symbol: '🛠️' },
+  { keyword: 'WOHNUNG ÖFFNEN', symbol: '🔑' },
+  { keyword: 'LKW', symbol: '🚛' },
+  { keyword: 'BUS', symbol: '🚌' },
+  { keyword: 'VU', symbol: '🚗' },
+  { keyword: 'ABC', symbol: '☣️' },
+  { keyword: 'ÖL', symbol: '🛢️' },
+  { keyword: 'WASSER', symbol: '💧' },
+  { keyword: 'PERSON', symbol: '🆘' },
+  { keyword: 'TIER', symbol: '🐾' },
+  { keyword: 'STURM', symbol: '🌪️' },
+  { keyword: 'UNWETTER', symbol: '⛈️' }
+] };
 let selectedVehicles = new Set();
 let vehicleAttachments = {}; // Fahrzeugname -> gewählter Anhänger/Container
 let parsedFf = [];
@@ -345,6 +365,10 @@ async function loadSettings(){
     .map(v => (v.options && v.options.length) ? `${v.name}: ${v.options.join(', ')}` : v.name)
     .join('\n');
   document.getElementById('hashtag').value = settings.hashtag;
+  settings.keywords = settings.keywords || [];
+  document.getElementById('keywordList').value = settings.keywords
+    .map(k => `${k.keyword}: ${k.symbol}`)
+    .join('\n');
   renderChips();
 
   try{
@@ -419,7 +443,7 @@ function selectIncident(inc){
   currentIncidentId = inc.id;
   document.getElementById('fDatum').value = inc.datum || '';
   document.getElementById('fZeit').value = inc.zeit || '';
-  document.getElementById('fInfo').value = inc.info || '';
+  document.getElementById('fInfo').value = applySymbol(inc.info || '');
   document.getElementById('fOrt').value = inc.ort || '';
   const own = settings.ownFd.trim().toLowerCase();
   parsedFf = (inc.feuerwehren || []).filter(Boolean).filter(f => f.trim().toLowerCase() !== own);
@@ -461,6 +485,15 @@ async function saveSettings(){
       return { name, options };
     });
   settings.hashtag = document.getElementById('hashtag').value.trim() || '#ffwosterhofen';
+  settings.keywords = document.getElementById('keywordList').value.split('\n')
+    .map(s=>s.trim()).filter(Boolean)
+    .map(line=>{
+      const sep = line.indexOf(':');
+      const keyword = (sep === -1 ? line : line.slice(0, sep)).trim();
+      const symbol = (sep === -1 ? '' : line.slice(sep + 1)).trim();
+      return { keyword, symbol };
+    })
+    .filter(k => k.keyword && k.symbol);
   const fleetNames = settings.fleet.map(v=>v.name);
   selectedVehicles = new Set([...selectedVehicles].filter(v => fleetNames.includes(v)));
   Object.keys(vehicleAttachments).forEach(k => { if(!fleetNames.includes(k)) delete vehicleAttachments[k]; });
@@ -520,6 +553,102 @@ function renderChips(){
   });
 }
 
+// Erkennt sowohl das neue, feldbasierte Mail-Format (Schlagwort:/Stichwort:/Ort:/Einsatzmittel ILS:)
+// als auch das alte, positionsbasierte Format (Gruppe:/Alarmierte Fahrzeuge:) als Fallback.
+function parseAlarmText(lines, raw){
+  const result = { id: '', datum: '', zeit: '', info: '', ort: '', feuerwehren: [] };
+
+  const hatNeuesFormat = lines.some(l => /^Schlagwort:/i.test(l));
+
+  if(hatNeuesFormat){
+    result.id = getField(lines, 'Einsatznummer:');
+
+    const alarmzeit = getField(lines, 'Alarmzeit:');
+    const dt = alarmzeit.match(/(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2}):\d{2}/);
+    result.datum = dt ? dt[1] : '';
+    result.zeit = dt ? dt[2] : '';
+
+    const schlagwort = getField(lines, 'Schlagwort:');
+    const stichwort = getField(lines, 'Stichwort:');
+    result.info = stichwort ? `${schlagwort}\n(${stichwort})` : schlagwort;
+
+    const ortRaw = getField(lines, 'Ort:');
+    result.ort = ortRaw.replace(/^\d{5}\s+/, '').trim();
+
+    const milIdx = lines.findIndex(l => /^Einsatzmittel ILS:/i.test(l));
+    let collecting = false;
+    if(milIdx !== -1){
+      for(let i = milIdx+1; i < lines.length; i++){
+        const l = lines[i];
+        if(!l) continue;
+        if(/^\*\s*/.test(l)){
+          collecting = true;
+          const item = l.replace(/^\*\s*/, '').trim();
+          if(/^(FF|THW)\s+/i.test(item) && result.feuerwehren.indexOf(item) === -1){
+            result.feuerwehren.push(item);
+          }
+        } else if(collecting){
+          break; // Liste zu Ende
+        }
+      }
+    }
+    return result;
+  }
+
+  // --- Altes Format (Fallback) ---
+  const dt = raw.match(/(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2}):\d{2}/);
+  result.datum = dt ? dt[1] : '';
+  result.zeit = dt ? dt[2] : '';
+
+  let plzIdx = -1;
+  lines.forEach((l,i)=>{
+    const m = l.match(/^\d{5}\s+(.+)$/);
+    if(m && plzIdx === -1){ plzIdx = i; result.ort = m[1].trim(); }
+  });
+
+  const gruppeIdx = lines.findIndex(l => /^Gruppe:/i.test(l));
+  if(gruppeIdx !== -1 && plzIdx !== -1){
+    const addrStart = Math.max(gruppeIdx+1, plzIdx - 2);
+    result.info = lines.slice(gruppeIdx+1, addrStart).filter(Boolean).join('\n');
+  }
+
+  const fzIdx = lines.findIndex(l => /^Alarmierte Fahrzeuge:/i.test(l));
+  if(fzIdx !== -1){
+    for(let i = fzIdx+1; i < lines.length; i++){
+      const l = lines[i];
+      if(!l) continue;
+      if(/^https?:\/\//i.test(l)) break;
+      if(/^(FF|THW)\s+/i.test(l) && result.feuerwehren.indexOf(l) === -1){
+        result.feuerwehren.push(l);
+      }
+    }
+  }
+  return result;
+}
+
+// Sucht in der ersten Zeile eines Info-Texts nach einem hinterlegten Stichwort
+// und stellt bei Treffer das passende Symbol voran (falls noch keins davorsteht).
+function applySymbol(info){
+  if(!info) return info;
+  const lines2 = info.split('\n');
+  const first = lines2[0];
+  for(const k of (settings.keywords || [])){
+    if(!k.keyword) continue;
+    if(first.toUpperCase().includes(k.keyword.toUpperCase())){
+      if(!first.trim().startsWith(k.symbol)){
+        lines2[0] = `${k.symbol} ${first}`;
+      }
+      break; // erster Treffer gewinnt
+    }
+  }
+  return lines2.join('\n');
+}
+
+function getField(lines, label){
+  const l = lines.find(x => x.toLowerCase().startsWith(label.toLowerCase()));
+  return l ? l.slice(label.length).trim() : '';
+}
+
 function parseMail(){
   const raw = document.getElementById('raw').value;
   if(!raw.trim()){ showToast('Bitte zuerst Text einfügen'); return; }
@@ -527,45 +656,15 @@ function parseMail(){
   document.getElementById('doneBtn').style.display = 'none';
   const lines = raw.split('\n').map(l=>l.trim());
 
-  // Datum + Uhrzeit
-  const dt = raw.match(/(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2}):\d{2}/);
-  document.getElementById('fDatum').value = dt ? dt[1] : '';
-  document.getElementById('fZeit').value = dt ? dt[2] : '';
+  const parsed = parseAlarmText(lines, raw);
+  document.getElementById('fDatum').value = parsed.datum;
+  document.getElementById('fZeit').value = parsed.zeit;
+  document.getElementById('fInfo').value = applySymbol(parsed.info);
+  document.getElementById('fOrt').value = parsed.ort;
 
-  // PLZ-Zeile finden -> Einsatzort + Ende des Adressblocks
-  let plzIdx = -1, ort = '';
-  lines.forEach((l,i)=>{
-    const m = l.match(/^\d{5}\s+(.+)$/);
-    if(m && plzIdx === -1){ plzIdx = i; ort = m[1].trim(); }
-  });
-  document.getElementById('fOrt').value = ort;
+  const own = settings.ownFd.trim().toLowerCase();
+  parsedFf = parsed.feuerwehren.filter(f => f.trim().toLowerCase() !== own);
 
-  // Info-Text: zwischen "Gruppe: ..." Zeile und Adressblock (3 Zeilen vor PLZ-Zeile)
-  const gruppeIdx = lines.findIndex(l => /^Gruppe:/i.test(l));
-  let info = '';
-  if(gruppeIdx !== -1 && plzIdx !== -1){
-    const addrStart = Math.max(gruppeIdx+1, plzIdx - 2); // Straße-Zeile, Straße+Nr-Zeile, PLZ-Zeile = 3 Zeilen
-    const infoLines = lines.slice(gruppeIdx+1, addrStart).filter(Boolean);
-    info = infoLines.join('\n');
-  }
-  document.getElementById('fInfo').value = info;
-
-  // Alarmierte Fahrzeuge -> zusätzliche Feuerwehren/THW (Zeilen die mit "FF " oder "THW" beginnen, ohne eigene FW)
-  const fzIdx = lines.findIndex(l => /^Alarmierte Fahrzeuge:/i.test(l));
-  parsedFf = [];
-  if(fzIdx !== -1){
-    for(let i = fzIdx+1; i < lines.length; i++){
-      const l = lines[i];
-      if(!l) continue;
-      if(/^https?:\/\//i.test(l)) break;
-      if(/^(FF|THW)\s+/i.test(l)){
-        const own = settings.ownFd.trim().toLowerCase();
-        if(l.toLowerCase() !== own && !parsedFf.includes(l)){
-          parsedFf.push(l);
-        }
-      }
-    }
-  }
   const ffBox = document.getElementById('ffList');
   ffBox.innerHTML = parsedFf.length
     ? parsedFf.map(f=>`<div>${f}</div>`).join('')
@@ -686,11 +785,21 @@ async function shareResult(){
         await navigator.share({ files: [file], text: text, title: 'Einsatz' });
         return;
       }
+    } else {
+      showToast('Ohne Bild zeigt Instagram sich hier nicht – Text ist kopiert');
     }
     await navigator.share({ text: text, title: 'Einsatz' });
   }catch(e){
     // Nutzer hat abgebrochen oder Teilen wird nicht unterstützt – Text ist schon kopiert
   }
+}
+
+async function openInstagramDirekt(){
+  const text = document.getElementById('output').value;
+  if(!text.trim()){ showToast('Erst Text erzeugen'); return; }
+  try{ await navigator.clipboard.writeText(text); }catch(e){ /* ignorieren */ }
+  showToast('Text kopiert – Instagram öffnet sich …');
+  setTimeout(()=>{ window.location.href = 'instagram://app'; }, 400);
 }
 
 let toastTimer;
