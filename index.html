@@ -584,8 +584,9 @@ function parseAlarmText(lines, raw){
         if(/^\*\s*/.test(l)){
           collecting = true;
           const item = l.replace(/^\*\s*/, '').trim();
-          if(/^(FF|THW)\s+/i.test(item) && result.feuerwehren.indexOf(item) === -1){
-            result.feuerwehren.push(item);
+          const m = item.match(/(FF|THW)\s+.+/i);
+          if(m && result.feuerwehren.indexOf(m[0].trim()) === -1){
+            result.feuerwehren.push(m[0].trim());
           }
         } else if(collecting){
           break; // Liste zu Ende
@@ -618,8 +619,9 @@ function parseAlarmText(lines, raw){
       const l = lines[i];
       if(!l) continue;
       if(/^https?:\/\//i.test(l)) break;
-      if(/^(FF|THW)\s+/i.test(l) && result.feuerwehren.indexOf(l) === -1){
-        result.feuerwehren.push(l);
+      const m = l.match(/(FF|THW)\s+.+/i);
+      if(m && result.feuerwehren.indexOf(m[0].trim()) === -1){
+        result.feuerwehren.push(m[0].trim());
       }
     }
   }
