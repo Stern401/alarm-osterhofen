@@ -574,22 +574,26 @@ function parseAlarmText(lines, raw){
 
     const ortRaw = getField(lines, 'Ort:');
     result.ort = ortRaw.replace(/^\d{5}\s+/, '').trim();
+    if(!result.ort){
+      // Fallback für Einsätze ohne Ortsangabe (z.B. Straßen-/Autobahnabschnitte)
+      result.ort = getField(lines, 'Straße:') || getField(lines, 'Abschnitt:');
+    }
 
     const milIdx = lines.findIndex(l => /^Einsatzmittel ILS:/i.test(l));
     let collecting = false;
     if(milIdx !== -1){
       for(let i = milIdx+1; i < lines.length; i++){
         const l = lines[i];
-        if(!l) continue;
-        if(/^\*\s*/.test(l)){
-          collecting = true;
-          const item = l.replace(/^\*\s*/, '').trim();
-          const m = item.match(/(FF|THW)\s+.+/i);
-          if(m && result.feuerwehren.indexOf(m[0].trim()) === -1){
-            result.feuerwehren.push(m[0].trim());
-          }
-        } else if(collecting){
-          break; // Liste zu Ende
+        if(!l){
+          if(collecting) break; // Leerzeile beendet die Liste
+          else continue;        // Leerzeile vor Listenbeginn überspringen
+        }
+        if(/^Diese Nachricht/i.test(l)) break; // Fußzeile erreicht
+        collecting = true;
+        const item = l.replace(/^\*\s*/, '').trim(); // führendes "* " entfernen, falls vorhanden
+        const m = item.match(/(FF|THW)\s+.+/i);
+        if(m && result.feuerwehren.indexOf(m[0].trim()) === -1){
+          result.feuerwehren.push(m[0].trim());
         }
       }
     }
