@@ -555,48 +555,58 @@ function renderChips(){
 
 // Erkennt sowohl das neue, feldbasierte Mail-Format (Schlagwort:/Stichwort:/Ort:/Einsatzmittel ILS:)
 // als auch das alte, positionsbasierte Format (Gruppe:/Alarmierte Fahrzeuge:) als Fallback.
+function extractField(raw, label){
+  const re = new RegExp(
+    '(?:^|[\\s*])' + label + ':\\*?\\s*([\\s\\S]*?)(?=\\s*\\*?[A-ZÄÖÜa-zäöü][A-Za-zÄÖÜäöüß ]{1,30}:\\*?\\s|\\s*-{4,}|$)',
+    'i'
+  );
+  const m = raw.match(re);
+  return m ? m[1].trim().replace(/\s+/g, ' ').trim() : '';
+}
+
+function splitItems(block){
+  return block
+    .replace(/\s*[-*]\s+/g, '|||')
+    .split('|||')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
 function parseAlarmText(lines, raw){
   const result = { id: '', datum: '', zeit: '', info: '', ort: '', feuerwehren: [] };
 
-  const hatNeuesFormat = lines.some(l => /^Schlagwort:/i.test(l));
+  const hatNeuesFormat = /\*?Schlagwort:\*?/i.test(raw);
 
   if(hatNeuesFormat){
-    result.id = getField(lines, 'Einsatznummer:');
+    // Feldgrenzen-basierte Erkennung: funktioniert egal ob Feldnamen fett (*Ort:*)
+    // oder normal sind, egal ob mit "-" oder "*" aufgezählt wird, und egal ob
+    // echte Zeilenumbrüche erhalten geblieben sind oder nicht.
+    result.id = extractField(raw, 'Einsatznummer');
 
-    const alarmzeit = getField(lines, 'Alarmzeit:');
+    const alarmzeit = extractField(raw, 'Alarmzeit');
     const dt = alarmzeit.match(/(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2}):\d{2}/);
     result.datum = dt ? dt[1] : '';
     result.zeit = dt ? dt[2] : '';
 
-    const schlagwort = getField(lines, 'Schlagwort:');
-    const stichwort = getField(lines, 'Stichwort:');
+    const schlagwort = extractField(raw, 'Schlagwort');
+    const stichwort = extractField(raw, 'Stichwort');
     result.info = stichwort ? `${schlagwort}\n(${stichwort})` : schlagwort;
 
-    const ortRaw = getField(lines, 'Ort:');
-    result.ort = ortRaw.replace(/^\d{5}\s+/, '').trim();
-    if(!result.ort){
+    let ort = extractField(raw, 'Ort').replace(/^\d{5}\s+/, '').trim();
+    if(!ort){
       // Fallback für Einsätze ohne Ortsangabe (z.B. Straßen-/Autobahnabschnitte)
-      result.ort = getField(lines, 'Straße:') || getField(lines, 'Abschnitt:');
+      ort = extractField(raw, 'Straße') || extractField(raw, 'Abschnitt');
     }
+    result.ort = ort;
 
-    const milIdx = lines.findIndex(l => /^Einsatzmittel ILS:/i.test(l));
-    let collecting = false;
-    if(milIdx !== -1){
-      for(let i = milIdx+1; i < lines.length; i++){
-        const l = lines[i];
-        if(!l){
-          if(collecting) break; // Leerzeile beendet die Liste
-          else continue;        // Leerzeile vor Listenbeginn überspringen
-        }
-        if(/^Diese Nachricht/i.test(l)) break; // Fußzeile erreicht
-        collecting = true;
-        const item = l.replace(/^\*\s*/, '').trim(); // führendes "* " entfernen, falls vorhanden
-        const m = item.match(/(FF|THW)\s+.+/i);
-        if(m && result.feuerwehren.indexOf(m[0].trim()) === -1){
-          result.feuerwehren.push(m[0].trim());
-        }
+    const milBlock = extractField(raw, 'Einsatzmittel ILS');
+    splitItems(milBlock).forEach(item=>{
+      const m = item.match(/(FF|THW)\s+.+/i);
+      if(m && result.feuerwehren.indexOf(m[0].trim()) === -1){
+        result.feuerwehren.push(m[0].trim());
       }
-    }
+    });
+
     return result;
   }
 
