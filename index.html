@@ -555,21 +555,22 @@ function renderChips(){
 
 // Erkennt sowohl das neue, feldbasierte Mail-Format (Schlagwort:/Stichwort:/Ort:/Einsatzmittel ILS:)
 // als auch das alte, positionsbasierte Format (Gruppe:/Alarmierte Fahrzeuge:) als Fallback.
+const BEKANNTE_FELDER = ['Einsatznummer','Alarmzeit','Weitere Einsatzinformationen','Schlagwort','Stichwort','Straße','Ort','Gemeinde','Abschnitt','Alarmierungen','Einsatzmittel ILS','Diese Nachricht'];
+const FELD_ALTERNATIVEN = BEKANNTE_FELDER.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+
 function extractField(raw, label){
   const re = new RegExp(
-    '(?:^|[\\s*])' + label + ':\\*?\\s*([\\s\\S]*?)(?=\\s*\\*?[A-ZÄÖÜa-zäöü][A-Za-zÄÖÜäöüß ]{1,30}:\\*?\\s|\\s*-{4,}|$)',
+    '(?:^|[\\s*])' + label + ':\\*?\\s*([\\s\\S]*?)(?=\\s*\\*?(?:' + FELD_ALTERNATIVEN + '):\\*?|\\s*-{4,}|$)',
     'i'
   );
   const m = raw.match(re);
   return m ? m[1].trim().replace(/\s+/g, ' ').trim() : '';
 }
 
+// Erkennt den Beginn jedes Eintrags direkt an "FF", "THW" oder "Florian" -
+// funktioniert egal ob mit "-", "*" oder ganz ohne Aufzählungszeichen aufgelistet wird.
 function splitItems(block){
-  return block
-    .replace(/\s*[-*]\s+/g, '|||')
-    .split('|||')
-    .map(s => s.trim())
-    .filter(Boolean);
+  return block.split(/(?=\b(?:FF|THW|Florian)\s)/).map(s => s.trim()).filter(Boolean);
 }
 
 function parseAlarmText(lines, raw){
@@ -600,10 +601,10 @@ function parseAlarmText(lines, raw){
     result.ort = ort;
 
     const milBlock = extractField(raw, 'Einsatzmittel ILS');
-    splitItems(milBlock).forEach(item=>{
-      const m = item.match(/(FF|THW)\s+.+/i);
-      if(m && result.feuerwehren.indexOf(m[0].trim()) === -1){
-        result.feuerwehren.push(m[0].trim());
+    splitItems(milBlock).forEach(rawItem=>{
+      const item = rawItem.replace(/[\s*-]+$/, '').trim();
+      if(/^(FF|THW)\s/i.test(item) && result.feuerwehren.indexOf(item) === -1){
+        result.feuerwehren.push(item);
       }
     });
 
