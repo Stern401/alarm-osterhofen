@@ -310,8 +310,9 @@ let settings = { ownFd: 'FF Osterhofen', fleet: [
   { name: 'Osterhofen 55/1', options: ['VSA', 'LIMA'] },
   { name: 'Osterhofen 63/1', options: [] }
 ], hashtag: '#ffwosterhofen', keywords: [
+  // Reihenfolge zählt: erster Treffer gewinnt. Spezielle Stichwörter vor dem allgemeinen THL,
+  // weil echte Schlagwörter mit "(THL)" beginnen (z.B. "(THL) VU#mehrere PKW").
   { keyword: 'BRAND', symbol: '🔥' },
-  { keyword: 'THL', symbol: '🛠️' },
   { keyword: 'WOHNUNG ÖFFNEN', symbol: '🔑' },
   { keyword: 'LKW', symbol: '🚛' },
   { keyword: 'BUS', symbol: '🚌' },
@@ -322,8 +323,21 @@ let settings = { ownFd: 'FF Osterhofen', fleet: [
   { keyword: 'PERSON', symbol: '🆘' },
   { keyword: 'TIER', symbol: '🐾' },
   { keyword: 'STURM', symbol: '🌪️' },
-  { keyword: 'UNWETTER', symbol: '⛈️' }
+  { keyword: 'UNWETTER', symbol: '⛈️' },
+  { keyword: 'THL', symbol: '🛠️' }
 ] };
+
+// Frühere Standardreihenfolge (THL an zweiter Stelle). Wurde sie nie angepasst, wird beim
+// Laden automatisch die neue Reihenfolge übernommen.
+const ALTE_STICHWORTE = [
+  { keyword: 'BRAND', symbol: '🔥' }, { keyword: 'THL', symbol: '🛠️' },
+  { keyword: 'WOHNUNG ÖFFNEN', symbol: '🔑' }, { keyword: 'LKW', symbol: '🚛' },
+  { keyword: 'BUS', symbol: '🚌' }, { keyword: 'VU', symbol: '🚗' },
+  { keyword: 'ABC', symbol: '☣️' }, { keyword: 'ÖL', symbol: '🛢️' },
+  { keyword: 'WASSER', symbol: '💧' }, { keyword: 'PERSON', symbol: '🆘' },
+  { keyword: 'TIER', symbol: '🐾' }, { keyword: 'STURM', symbol: '🌪️' },
+  { keyword: 'UNWETTER', symbol: '⛈️' }
+];
 let selectedVehicles = new Set();
 let vehicleAttachments = {}; // Fahrzeugname -> gewählter Anhänger/Container
 let parsedFf = [];
@@ -356,7 +370,9 @@ async function loadSettings(){
     const r = await storageGet('alarm-generator-settings');
     if(r && r.value){
       const s = JSON.parse(r.value);
+      const neueStichworte = settings.keywords;
       settings = Object.assign(settings, s);
+      if(JSON.stringify(s.keywords) === JSON.stringify(ALTE_STICHWORTE)) settings.keywords = neueStichworte;
     }
   }catch(e){ /* keine gespeicherten Einstellungen, Standard verwenden */ }
   document.getElementById('ownFd').value = settings.ownFd;
